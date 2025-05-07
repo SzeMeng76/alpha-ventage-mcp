@@ -1,357 +1,301 @@
-#!/usr/bin/env node
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-  ErrorCode,
-  McpError,
-} from '@modelcontextprotocol/sdk/types.js';
-import axios, { AxiosInstance } from 'axios';
+import { z } from 'zod';
+import axios from 'axios';
 
-interface AlphaVantageConfig {
-  apiKey: string;
-}
-
-class AlphaVantageServer {
-  private server: Server;
-  private axiosInstance: AxiosInstance;
-
-  constructor(config: AlphaVantageConfig) {
-    this.server = new Server(
-      {
-        name: 'alpha-ventage-mcp',
-        version: '0.1.0',
-      },
-      {
-        capabilities: {
-          tools: {},
-        },
-      }
-    );
-
-    this.axiosInstance = axios.create({
-      baseURL: 'https://www.alphavantage.co/query',
-      params: {
-        apikey: config.apiKey,
-      },
-    });
-
-    this.setupToolHandlers();
-    
-    this.server.onerror = (error) => console.error('[MCP Error]', error);
-    process.on('SIGINT', async () => {
-      await this.server.close();
-      process.exit(0);
-    });
-  }
-
-  private setupToolHandlers() {
-    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
-      try {
-        switch (request.params.name) {
-          case 'get_stock_price':
-            return await this.getStockPrice(request.params.arguments);
-          case 'get_company_overview':
-            return await this.getCompanyOverview(request.params.arguments);
-          case 'get_daily_time_series':
-            return await this.getDailyTimeSeries(request.params.arguments);
-          case 'get_weekly_time_series':
-            return await this.getWeeklyTimeSeries(request.params.arguments);
-          case 'get_forex_rate':
-            return await this.getForexRate(request.params.arguments);
-          case 'get_crypto_price':
-            return await this.getCryptoPrice(request.params.arguments);
-          case 'get_technical_indicator':
-            return await this.getTechnicalIndicator(request.params.arguments);
-          default:
-            throw new McpError(
-              ErrorCode.MethodNotFound,
-              `Unknown tool: ${request.params.name}`
-            );
-        }
-      } catch (error) {
-        if (axios.isAxiosError(error)) {
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `Alpha Vantage API error: ${
-                  error.response?.data.message ?? error.message
-                }`,
-              },
-            ],
-            isError: true,
-          };
-        }
-        throw error;
-      }
-    });
-
-    this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
-      tools: [
-        {
-          name: 'get_stock_price',
-          description: 'Get real-time stock price information',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              symbol: {
-                type: 'string',
-                description: 'The stock symbol (e.g., AAPL)',
-              },
-            },
-            required: ['symbol'],
-          },
-        },
-        {
-          name: 'get_company_overview',
-          description: 'Get company information and key metrics',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              symbol: {
-                type: 'string',
-                description: 'The stock symbol (e.g., AAPL)',
-              },
-            },
-            required: ['symbol'],
-          },
-        },
-        {
-          name: 'get_daily_time_series',
-          description: 'Get daily time series data for a stock',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              symbol: {
-                type: 'string',
-                description: 'The stock symbol (e.g., AAPL)',
-              },
-              outputsize: {
-                type: 'string',
-                description: 'Amount of data to return (compact/full)',
-                enum: ['compact', 'full'],
-                default: 'compact',
-              },
-            },
-            required: ['symbol'],
-          },
-        },
-        {
-          name: 'get_weekly_time_series',
-          description: 'Get weekly time series data for a stock',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              symbol: {
-                type: 'string',
-                description: 'The stock symbol (e.g., AAPL)',
-              },
-            },
-            required: ['symbol'],
-          },
-        },
-        {
-          name: 'get_forex_rate',
-          description: 'Get exchange rate for currency pairs',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              from_currency: {
-                type: 'string',
-                description: 'From currency (e.g., USD)',
-              },
-              to_currency: {
-                type: 'string',
-                description: 'To currency (e.g., EUR)',
-              },
-            },
-            required: ['from_currency', 'to_currency'],
-          },
-        },
-        {
-          name: 'get_crypto_price',
-          description: 'Get cryptocurrency prices',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              symbol: {
-                type: 'string',
-                description: 'The crypto symbol (e.g., BTC)',
-              },
-              market: {
-                type: 'string',
-                description: 'Market currency (e.g., USD)',
-              },
-            },
-            required: ['symbol', 'market'],
-          },
-        },
-        {
-          name: 'get_technical_indicator',
-          description: 'Get technical indicators for a stock',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              symbol: {
-                type: 'string',
-                description: 'The stock symbol (e.g., AAPL)',
-              },
-              indicator: {
-                type: 'string',
-                description: 'Technical indicator (e.g., SMA, EMA, RSI)',
-              },
-              interval: {
-                type: 'string',
-                description: 'Time interval',
-                enum: ['1min', '5min', '15min', '30min', '60min', 'daily', 'weekly', 'monthly'],
-                default: 'daily',
-              },
-            },
-            required: ['symbol', 'indicator'],
-          },
-        },
-      ],
-    }));
-  }
-
-  private async getStockPrice(args: any) {
-    const response = await this.axiosInstance.get('', {
-      params: {
-        function: 'GLOBAL_QUOTE',
-        symbol: args.symbol,
-      },
-    });
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(response.data, null, 2),
-        },
-      ],
-    };
-  }
-
-  private async getCompanyOverview(args: any) {
-    const response = await this.axiosInstance.get('', {
-      params: {
-        function: 'OVERVIEW',
-        symbol: args.symbol,
-      },
-    });
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(response.data, null, 2),
-        },
-      ],
-    };
-  }
-
-  private async getDailyTimeSeries(args: any) {
-    const response = await this.axiosInstance.get('', {
-      params: {
-        function: 'TIME_SERIES_DAILY',
-        symbol: args.symbol,
-        outputsize: args.outputsize || 'compact',
-      },
-    });
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(response.data, null, 2),
-        },
-      ],
-    };
-  }
-
-  private async getWeeklyTimeSeries(args: any) {
-    const response = await this.axiosInstance.get('', {
-      params: {
-        function: 'TIME_SERIES_WEEKLY',
-        symbol: args.symbol,
-      },
-    });
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(response.data, null, 2),
-        },
-      ],
-    };
-  }
-
-  private async getForexRate(args: any) {
-    const response = await this.axiosInstance.get('', {
-      params: {
-        function: 'CURRENCY_EXCHANGE_RATE',
-        from_currency: args.from_currency,
-        to_currency: args.to_currency,
-      },
-    });
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(response.data, null, 2),
-        },
-      ],
-    };
-  }
-
-  private async getCryptoPrice(args: any) {
-    const response = await this.axiosInstance.get('', {
-      params: {
-        function: 'CRYPTO_INTRADAY',
-        symbol: args.symbol,
-        market: args.market,
-      },
-    });
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(response.data, null, 2),
-        },
-      ],
-    };
-  }
-
-  private async getTechnicalIndicator(args: any) {
-    const response = await this.axiosInstance.get('', {
-      params: {
-        function: args.indicator,
-        symbol: args.symbol,
-        interval: args.interval || 'daily',
-      },
-    });
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify(response.data, null, 2),
-        },
-      ],
-    };
-  }
-
-  async run() {
-    const transport = new StdioServerTransport();
-    await this.server.connect(transport);
-    console.error('Alpha Vantage MCP server running on stdio');
-  }
-}
-
+const ALPHA_VANTAGE_BASE = 'https://www.alphavantage.co/query';
 const API_KEY = process.env.ALPHA_VANTAGE_API_KEY;
+
 if (!API_KEY) {
-  throw new Error('ALPHA_VANTAGE_API_KEY environment variable is required');
+  throw new Error('ALPHA_VANTAGE_API_KEY 环境变量是必需的');
 }
 
-const server = new AlphaVantageServer({
-  apiKey: API_KEY,
+const server = new McpServer({
+  name: 'alpha-vantage',
+  version: '1.0.0',
 });
-server.run().catch(console.error);
+
+// 获取股票价格
+server.tool(
+  'get_stock_price',
+  '获取实时股票价格信息',
+  {
+    symbol: z.string().describe('股票代码（例如：AAPL）'),
+  },
+  async ({ symbol }) => {
+    const stockData = await makeAlphaVantageRequest({
+      function: 'GLOBAL_QUOTE',
+      symbol,
+    });
+    
+    if (!stockData) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: '获取股票数据失败',
+          },
+        ],
+      };
+    }
+    
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(stockData, null, 2),
+        },
+      ],
+    };
+  },
+);
+
+// 获取公司概况
+server.tool(
+  'get_company_overview',
+  '获取公司信息和关键指标',
+  {
+    symbol: z.string().describe('股票代码（例如：AAPL）'),
+  },
+  async ({ symbol }) => {
+    const companyData = await makeAlphaVantageRequest({
+      function: 'OVERVIEW',
+      symbol,
+    });
+    
+    if (!companyData) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: '获取公司数据失败',
+          },
+        ],
+      };
+    }
+    
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(companyData, null, 2),
+        },
+      ],
+    };
+  },
+);
+
+// 获取每日时间序列
+server.tool(
+  'get_daily_time_series',
+  '获取股票的每日时间序列数据',
+  {
+    symbol: z.string().describe('股票代码（例如：AAPL）'),
+    outputsize: z.enum(['compact', 'full']).default('compact').describe('返回数据量（compact/full）'),
+  },
+  async ({ symbol, outputsize }) => {
+    const timeSeriesData = await makeAlphaVantageRequest({
+      function: 'TIME_SERIES_DAILY',
+      symbol,
+      outputsize,
+    });
+    
+    if (!timeSeriesData) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: '获取时间序列数据失败',
+          },
+        ],
+      };
+    }
+    
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(timeSeriesData, null, 2),
+        },
+      ],
+    };
+  },
+);
+
+// 获取每周时间序列
+server.tool(
+  'get_weekly_time_series',
+  '获取股票的每周时间序列数据',
+  {
+    symbol: z.string().describe('股票代码（例如：AAPL）'),
+  },
+  async ({ symbol }) => {
+    const weeklyData = await makeAlphaVantageRequest({
+      function: 'TIME_SERIES_WEEKLY',
+      symbol,
+    });
+    
+    if (!weeklyData) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: '获取每周时间序列数据失败',
+          },
+        ],
+      };
+    }
+    
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(weeklyData, null, 2),
+        },
+      ],
+    };
+  },
+);
+
+// 获取外汇汇率
+server.tool(
+  'get_forex_rate',
+  '获取货币对的汇率',
+  {
+    from_currency: z.string().describe('源货币（例如：USD）'),
+    to_currency: z.string().describe('目标货币（例如：EUR）'),
+  },
+  async ({ from_currency, to_currency }) => {
+    const forexData = await makeAlphaVantageRequest({
+      function: 'CURRENCY_EXCHANGE_RATE',
+      from_currency,
+      to_currency,
+    });
+    
+    if (!forexData) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: '获取外汇汇率数据失败',
+          },
+        ],
+      };
+    }
+    
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(forexData, null, 2),
+        },
+      ],
+    };
+  },
+);
+
+// 获取加密货币价格
+server.tool(
+  'get_crypto_price',
+  '获取加密货币价格',
+  {
+    symbol: z.string().describe('加密货币代码（例如：BTC）'),
+    market: z.string().describe('市场货币（例如：USD）'),
+  },
+  async ({ symbol, market }) => {
+    const cryptoData = await makeAlphaVantageRequest({
+      function: 'CRYPTO_INTRADAY',
+      symbol,
+      market,
+    });
+    
+    if (!cryptoData) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: '获取加密货币价格数据失败',
+          },
+        ],
+      };
+    }
+    
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(cryptoData, null, 2),
+        },
+      ],
+    };
+  },
+);
+
+// 获取技术指标
+server.tool(
+  'get_technical_indicator',
+  '获取股票的技术指标',
+  {
+    symbol: z.string().describe('股票代码（例如：AAPL）'),
+    indicator: z.string().describe('技术指标（例如：SMA, EMA, RSI）'),
+    interval: z.enum(['1min', '5min', '15min', '30min', '60min', 'daily', 'weekly', 'monthly']).default('daily').describe('时间间隔'),
+  },
+  async ({ symbol, indicator, interval }) => {
+    const indicatorData = await makeAlphaVantageRequest({
+      function: indicator,
+      symbol,
+      interval,
+    });
+    
+    if (!indicatorData) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: '获取技术指标数据失败',
+          },
+        ],
+      };
+    }
+    
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(indicatorData, null, 2),
+        },
+      ],
+    };
+  },
+);
+
+async function makeAlphaVantageRequest(params) {
+  try {
+    const response = await axios.get(ALPHA_VANTAGE_BASE, {
+      params: {
+        ...params,
+        apikey: API_KEY,
+      },
+    });
+    
+    if (!response.data) {
+      throw new Error('无效的响应数据');
+    }
+    
+    return response.data;
+  } catch (error) {
+    console.error('[错误] 请求 Alpha Vantage API 失败:', error);
+    return null;
+  }
+}
+
+async function main() {
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+  console.log('Alpha Vantage MCP 服务器正在通过 stdio 运行');
+}
+
+main().catch((error) => {
+  console.error('main() 中的致命错误:', error);
+  process.exit(1);
+});
