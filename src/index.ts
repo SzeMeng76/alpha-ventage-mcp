@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
@@ -14,6 +15,18 @@ const server = new McpServer({
   name: 'alpha-vantage',
   version: '1.0.0',
 });
+
+// 定义接口类型
+interface AlphaVantageParams {
+  function: string;
+  symbol?: string;
+  outputsize?: string;
+  from_currency?: string;
+  to_currency?: string;
+  market?: string;
+  interval?: string;
+  [key: string]: string | undefined;  // 允许其他可能的参数
+}
 
 // 获取股票价格
 server.tool(
@@ -269,7 +282,7 @@ server.tool(
   },
 );
 
-async function makeAlphaVantageRequest(params) {
+async function makeAlphaVantageRequest(params: AlphaVantageParams) {
   try {
     const response = await axios.get(ALPHA_VANTAGE_BASE, {
       params: {
