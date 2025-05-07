@@ -1,11 +1,10 @@
 {
   "name": "alpha-vantage-mcp",
-  "version": "0.1.1",
+  "version": "0.1.0",
   "description": "A MCP server for Alpha Vantage API",
-  "private": true,
   "type": "module",
   "bin": {
-    "alpha-vantage-mcp": "./build/index.js"
+    "alphavantage": "./build/index.js"
   },
   "files": [
     "build"
