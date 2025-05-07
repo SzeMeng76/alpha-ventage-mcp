@@ -1,11 +1,11 @@
 {
-  "name": "alpha-ventage-mcp",
-  "version": "0.1.0",
-  "description": "A MCP server for alpha ventage",
+  "name": "alpha-vantage-mcp",
+  "version": "1.0.0",
+  "description": "A MCP server for Alpha Vantage API",
   "private": true,
   "type": "module",
   "bin": {
-    "alpha-ventage-mcp": "./build/index.js"
+    "alpha-vantage-mcp": "./build/index.js"
   },
   "files": [
     "build"
@@ -17,11 +17,12 @@
     "inspector": "npx @modelcontextprotocol/inspector build/index.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "0.6.0",
-    "axios": "^1.8.4"
+    "@modelcontextprotocol/sdk": "^1.11.0",
+    "axios": "^1.9.0",
+    "zod": "^3.24.4"
   },
   "devDependencies": {
-    "@types/node": "^20.11.24",
-    "typescript": "^5.3.3"
+    "@types/node": "^22.15.14",
+    "typescript": "^5.8.3"
   }
 }
