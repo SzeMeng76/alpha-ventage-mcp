@@ -1,6 +1,6 @@
 {
   "name": "alpha-vantage-mcp",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "A MCP server for Alpha Vantage API",
   "private": true,
   "type": "module",
